@@ -4,6 +4,8 @@ pragma solidity ^0.8.15;
 import {DSTestPlus} from "lib/solmate/src/test/utils/DSTestPlus.sol";
 import {DSInvariantTest} from "lib/solmate/src/test/utils/DSInvariantTest.sol";
 
+import {stdError} from "lib/forge-std/src/StdError.sol";
+
 import {MockUDVTToken as MockERC20} from "./MockUDVTToken.sol";
 
 contract udvtERC20Test is DSTestPlus {
@@ -17,6 +19,7 @@ contract udvtERC20Test is DSTestPlus {
     }
 
     function invariantMetadata() public {
+        assertEq(token.name(), "Token");
         assertEq(token.name(), "Token");
         assertEq(token.symbol(), "TKN");
         assertEq(token.decimals(), 18);
@@ -108,12 +111,14 @@ contract udvtERC20Test is DSTestPlus {
         assertEq(token.nonces(owner), 1);
     }
 
-    function testFailTransferInsufficientBalance() public {
+    function testTransferInsufficientBalanceReverts() public {
         token.mint(address(this), 0.9e18);
+
+        hevm.expectRevert(stdError.arithmeticError);
         token.transfer(address(0xBEEF), 1e18);
     }
 
-    function testFailTransferFromInsufficientAllowance() public {
+    function testTransferFromInsufficientAllowanceReverts() public {
         address from = address(0xABCD);
 
         token.mint(from, 1e18);
@@ -121,10 +126,11 @@ contract udvtERC20Test is DSTestPlus {
         hevm.prank(from);
         token.approve(address(this), 0.9e18);
 
+        hevm.expectRevert(stdError.arithmeticError);
         token.transferFrom(from, address(0xBEEF), 1e18);
     }
 
-    function testFailTransferFromInsufficientBalance() public {
+    function testTransferFromInsufficientBalanceReverts() public {
         address from = address(0xABCD);
 
         token.mint(from, 0.9e18);
@@ -132,10 +138,11 @@ contract udvtERC20Test is DSTestPlus {
         hevm.prank(from);
         token.approve(address(this), 1e18);
 
+        hevm.expectRevert(stdError.arithmeticError);
         token.transferFrom(from, address(0xBEEF), 1e18);
     }
 
-    function testFailPermitBadNonce() public {
+    function testPermitBadNonceReverts() public {
         uint256 privateKey = 0xBEEF;
         address owner = hevm.addr(privateKey);
 
@@ -150,10 +157,11 @@ contract udvtERC20Test is DSTestPlus {
             )
         );
 
+        hevm.expectRevert(abi.encodePacked("INVALID_SIGNER"));
         token.permit(owner, address(0xCAFE), 1e18, block.timestamp, v, r, s);
     }
 
-    function testFailPermitBadDeadline() public {
+    function testPermitBadDeadlineReverts() public {
         uint256 privateKey = 0xBEEF;
         address owner = hevm.addr(privateKey);
 
@@ -168,10 +176,11 @@ contract udvtERC20Test is DSTestPlus {
             )
         );
 
+        hevm.expectRevert(abi.encodePacked("INVALID_SIGNER"));
         token.permit(owner, address(0xCAFE), 1e18, block.timestamp + 1, v, r, s);
     }
 
-    function testFailPermitPastDeadline() public {
+    function testPermitPastDeadlineReverts() public {
         uint256 oldTimestamp = block.timestamp;
         uint256 privateKey = 0xBEEF;
         address owner = hevm.addr(privateKey);
@@ -188,10 +197,11 @@ contract udvtERC20Test is DSTestPlus {
         );
 
         hevm.warp(block.timestamp + 1);
+        hevm.expectRevert(abi.encodePacked("PERMIT_DEADLINE_EXPIRED"));
         token.permit(owner, address(0xCAFE), 1e18, oldTimestamp, v, r, s);
     }
 
-    function testFailPermitReplay() public {
+    function testPermitReplayReverts() public {
         uint256 privateKey = 0xBEEF;
         address owner = hevm.addr(privateKey);
 
@@ -207,14 +217,11 @@ contract udvtERC20Test is DSTestPlus {
         );
 
         token.permit(owner, address(0xCAFE), 1e18, block.timestamp, v, r, s);
+        hevm.expectRevert(abi.encodePacked("INVALID_SIGNER"));
         token.permit(owner, address(0xCAFE), 1e18, block.timestamp, v, r, s);
     }
 
-    function testMetadata(
-        string calldata name,
-        string calldata symbol,
-        uint8 decimals
-    ) public {
+    function testMetadata(string calldata name, string calldata symbol, uint8 decimals) public {
         MockERC20 tkn = new MockERC20(name, symbol, decimals);
 
         assertEq(tkn.name(), name);
@@ -229,11 +236,7 @@ contract udvtERC20Test is DSTestPlus {
         assertEq(token.balanceOf(from), amount);
     }
 
-    function testBurn(
-        address from,
-        uint256 mintAmount,
-        uint256 burnAmount
-    ) public {
+    function testBurn(address from, uint256 mintAmount, uint256 burnAmount) public {
         burnAmount = bound(burnAmount, 0, mintAmount);
 
         token.mint(from, mintAmount);
@@ -263,11 +266,7 @@ contract udvtERC20Test is DSTestPlus {
         }
     }
 
-    function testTransferFrom(
-        address to,
-        uint256 approval,
-        uint256 amount
-    ) public {
+    function testTransferFrom(address to, uint256 approval, uint256 amount) public {
         amount = bound(amount, 0, approval);
 
         address from = address(0xABCD);
@@ -291,12 +290,7 @@ contract udvtERC20Test is DSTestPlus {
         }
     }
 
-    function testPermit(
-        uint248 privKey,
-        address to,
-        uint256 amount,
-        uint256 deadline
-    ) public {
+    function testPermit(uint248 privKey, address to, uint256 amount, uint256 deadline) public {
         uint256 privateKey = privKey;
         if (deadline < block.timestamp) deadline = block.timestamp;
         if (privateKey == 0) privateKey = 1;
@@ -320,33 +314,28 @@ contract udvtERC20Test is DSTestPlus {
         assertEq(token.nonces(owner), 1);
     }
 
-    function testFailBurnInsufficientBalance(
-        address to,
-        uint256 mintAmount,
-        uint256 burnAmount
-    ) public {
+    function testBurnInsufficientBalanceReverts(address to, uint256 mintAmount, uint256 burnAmount) public {
+        if (mintAmount == type(uint256).max) mintAmount--;
         burnAmount = bound(burnAmount, mintAmount + 1, type(uint256).max);
 
         token.mint(to, mintAmount);
+
+        hevm.expectRevert(stdError.arithmeticError);
         token.burn(to, burnAmount);
     }
 
-    function testFailTransferInsufficientBalance(
-        address to,
-        uint256 mintAmount,
-        uint256 sendAmount
-    ) public {
+    function testTransferInsufficientBalanceReverts(address to, uint256 mintAmount, uint256 sendAmount) public {
+        if (mintAmount == type(uint256).max) mintAmount--;
         sendAmount = bound(sendAmount, mintAmount + 1, type(uint256).max);
 
         token.mint(address(this), mintAmount);
+
+        hevm.expectRevert(stdError.arithmeticError);
         token.transfer(to, sendAmount);
     }
 
-    function testFailTransferFromInsufficientAllowance(
-        address to,
-        uint256 approval,
-        uint256 amount
-    ) public {
+    function testTransferFromInsufficientAllowanceReverts(address to, uint256 approval, uint256 amount) public {
+        if (approval == type(uint256).max) approval--;
         amount = bound(amount, approval + 1, type(uint256).max);
 
         address from = address(0xABCD);
@@ -356,14 +345,12 @@ contract udvtERC20Test is DSTestPlus {
         hevm.prank(from);
         token.approve(address(this), approval);
 
+        hevm.expectRevert(stdError.arithmeticError);
         token.transferFrom(from, to, amount);
     }
 
-    function testFailTransferFromInsufficientBalance(
-        address to,
-        uint256 mintAmount,
-        uint256 sendAmount
-    ) public {
+    function testTransferFromInsufficientBalanceReverts(address to, uint256 mintAmount, uint256 sendAmount) public {
+        if (mintAmount == type(uint256).max) mintAmount--;
         sendAmount = bound(sendAmount, mintAmount + 1, type(uint256).max);
 
         address from = address(0xABCD);
@@ -373,16 +360,13 @@ contract udvtERC20Test is DSTestPlus {
         hevm.prank(from);
         token.approve(address(this), sendAmount);
 
+        hevm.expectRevert(stdError.arithmeticError);
         token.transferFrom(from, to, sendAmount);
     }
 
-    function testFailPermitBadNonce(
-        uint256 privateKey,
-        address to,
-        uint256 amount,
-        uint256 deadline,
-        uint256 nonce
-    ) public {
+    function testPermitBadNonceReverts(uint248 privateKey, address to, uint256 amount, uint256 deadline, uint256 nonce)
+        public
+    {
         if (deadline < block.timestamp) deadline = block.timestamp;
         if (privateKey == 0) privateKey = 1;
         if (nonce == 0) nonce = 1;
@@ -400,15 +384,12 @@ contract udvtERC20Test is DSTestPlus {
             )
         );
 
+        hevm.expectRevert(abi.encodePacked("INVALID_SIGNER"));
         token.permit(owner, to, amount, deadline, v, r, s);
     }
 
-    function testFailPermitBadDeadline(
-        uint256 privateKey,
-        address to,
-        uint256 amount,
-        uint256 deadline
-    ) public {
+    function testPermitBadDeadlineReverts(uint248 privateKey, address to, uint256 amount, uint256 deadline) public {
+        if (deadline == type(uint256).max) deadline--;
         if (deadline < block.timestamp) deadline = block.timestamp;
         if (privateKey == 0) privateKey = 1;
 
@@ -425,15 +406,11 @@ contract udvtERC20Test is DSTestPlus {
             )
         );
 
+        hevm.expectRevert(abi.encodePacked("INVALID_SIGNER"));
         token.permit(owner, to, amount, deadline + 1, v, r, s);
     }
 
-    function testFailPermitPastDeadline(
-        uint256 privateKey,
-        address to,
-        uint256 amount,
-        uint256 deadline
-    ) public {
+    function testPermitPastDeadlineReverts(uint248 privateKey, address to, uint256 amount, uint256 deadline) public {
         deadline = bound(deadline, 0, block.timestamp - 1);
         if (privateKey == 0) privateKey = 1;
 
@@ -450,15 +427,11 @@ contract udvtERC20Test is DSTestPlus {
             )
         );
 
+        hevm.expectRevert(abi.encodePacked("PERMIT_DEADLINE_EXPIRED"));
         token.permit(owner, to, amount, deadline, v, r, s);
     }
 
-    function testFailPermitReplay(
-        uint256 privateKey,
-        address to,
-        uint256 amount,
-        uint256 deadline
-    ) public {
+    function testPermitReplayReverts(uint248 privateKey, address to, uint256 amount, uint256 deadline) public {
         if (deadline < block.timestamp) deadline = block.timestamp;
         if (privateKey == 0) privateKey = 1;
 
@@ -476,6 +449,7 @@ contract udvtERC20Test is DSTestPlus {
         );
 
         token.permit(owner, to, amount, deadline, v, r, s);
+        hevm.expectRevert(abi.encodePacked("INVALID_SIGNER"));
         token.permit(owner, to, amount, deadline, v, r, s);
     }
 }
@@ -518,11 +492,7 @@ contract BalanceSum {
         token.approve(to, amount);
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public {
+    function transferFrom(address from, address to, uint256 amount) public {
         token.transferFrom(from, to, amount);
     }
 
